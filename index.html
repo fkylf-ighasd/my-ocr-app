@@ -136,29 +136,85 @@
             status.innerText = "カメラエラー: " + err.name;
         }
     }
-
-    btn.onclick = async () => {
+// ※ここにデプロイしたURLを貼り付けてください
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbzY9KvGkYZDUG_9IFy5q91cj5A0jnpePuGIDLfaUG8nY9Gx7jDuEMY5lyoazQMNmzFBsg/exec";
+    
+   btn.onclick = async () => {
         btn.disabled = true;
-        const ctx = canvas.getContext('2d');
+        status.innerText = "解析中...";
+
+        // --- 1. 画像のキャプチャと回転 (以前と同様) ---
         const vW = video.videoWidth;
         const vH = video.videoHeight;
-        canvas.width = vH; 
-        canvas.height = vW;
-        ctx.translate(canvas.width / 2, canvas.height / 2);
-        ctx.rotate(-90 * Math.PI / 180);
-        ctx.drawImage(video, -vW / 2, -vH / 2);
+        canvasUpload.width = vH;  // 回転後の横幅
+        canvasUpload.height = vW; // 回転後の縦幅
+        const ctxU = canvasUpload.getContext('2d');
+        ctxU.translate(canvasUpload.width / 2, canvasUpload.height / 2);
+        ctxU.rotate(-90 * Math.PI / 180);
+        ctxU.drawImage(video, -vW / 2, -vH / 2);
 
-        const base64Data = canvas.toDataURL('image/jpeg', 0.8);
-        previewImg.src = base64Data;
+        // プレビュー表示
+        previewImg.src = canvasUpload.toDataURL('image/jpeg');
         previewImg.style.display = 'block';
-        const size = Math.round((base64Data.length * 0.75) / 1024);
-        status.innerText = `送信完了 (${size}KB)`;
+
+        // --- 2. 各エリアの切り抜き解析関数 ---
+        async function getAreaText(rectPercent) {
+            const tempCanvas = document.createElement('canvas');
+            const tCtx = tempCanvas.getContext('2d');
+            
+            // %座標をピクセルに変換
+            // 注：ガイドは右(right)基準なので計算を合わせる
+            const w = (rectPercent.w / 100) * canvasUpload.width;
+            const h = (rectPercent.h / 100) * canvasUpload.height;
+            const x = canvasUpload.width - ((rectPercent.right / 100) * canvasUpload.width) - w;
+            const y = (rectPercent.top / 100) * canvasUpload.height;
+
+            tempCanvas.width = w;
+            tempCanvas.height = h;
+            tCtx.drawImage(canvasUpload, x, y, w, h, 0, 0, w, h);
+
+            const { data: { text } } = await worker.recognize(tempCanvas);
+            return text.trim();
+        }
+
+        try {
+            // --- 3. 各項目を順番に解析 ---
+            // 座標データ（UIのCSS設定と合わせる）
+            const results = {
+                no:    await getAreaText({ right: 9.46,  top: 10, w: 10.81, h: 14.29 }),
+                model: await getAreaText({ right: 20.27, top: 10, w: 10.81, h: 46.67 }),
+                part:  await getAreaText({ right: 31.08, top: 10, w: 10.81, h: 46.67 }),
+                // 作業枠と納期枠（代表して1つずつ。本来はループで回す）
+                works: [await getAreaText({ right: 45.95, top: 10, w: 6.76, h: 8.5 })], 
+                dates: [await getAreaText({ right: 59.46, top: 10, w: 6.76, h: 8.5 })]
+            };
+
+            console.log("解析完了:", results);
+
+            // --- 4. GASへ送信 ---
+            status.innerText = "送信中...";
+            await fetch(GAS_URL, {
+                method: "POST",
+                mode: "no-cors",
+                body: JSON.stringify({
+                    no: results.no,
+                    model: results.model,
+                    part: results.part,
+                    works: results.works,
+                    dates: results.dates,
+                    fullText: "Area OCR Used"
+                })
+            });
+
+            status.innerText = "保存完了！";
+        } catch (e) {
+            status.innerText = "失敗: " + e;
+        }
 
         setTimeout(() => {
             previewImg.style.display = 'none';
             btn.disabled = false;
-            status.innerText = "次の帳票をスキャンできます";
-        }, 1200);
+        }, 1500);
     };
     window.onload = initCamera;
 </script>
