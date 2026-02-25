@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR診断モード</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+        body { margin: 0; background: #222; color: #fff; text-align: center; font-family: sans-serif; }
+        video { width: 100%; max-height: 50vh; background: #000; }
+        #output { background: #000; padding: 10px; height: 30vh; overflow-y: scroll; font-size: 12px; text-align: left; color: #0f0; border: 1px solid #555; margin: 10px; }
+        button { padding: 20px; width: 80%; font-size: 18px; font-weight: bold; background: #28a745; color: white; border: none; border-radius: 10px; }
+    </style>
+</head>
+<body>
+
+<h3>OCR診断モード</h3>
+<video id="video" autoplay playsinline muted></video>
+<div id="status">エンジン起動中...</div>
+<button id="cap-btn" disabled>テスト撮影</button>
+<div id="output">【ここに解析結果が出ます】</div>
+<canvas id="canvas" style="display:none;"></canvas>
+
+<script>
+    const video = document.getElementById('video');
+    const status = document.getElementById('status');
+    const output = document.getElementById('output');
+    const btn = document.getElementById('cap-btn');
+    const canvas = document.getElementById('canvas');
+    let worker = null;
+
+    async function init() {
+        // 1. カメラ起動
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        video.srcObject = stream;
+
+        // 2. OCR起動
+        status.innerText = "学習データ読み込み中...";
+        worker = await Tesseract.createWorker('jpn'); // まずは日本語
+        status.innerText = "準備完了。書類を撮ってください";
+        btn.disabled = false;
+    }
+
+    btn.onclick = async () => {
+        btn.disabled = true;
+        status.innerText = "解析中...（10秒ほど待機）";
+        output.innerText = "読み取り開始...";
+
+        // キャンバスにそのまま描画
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+
+        try {
+            // 回転なし、加工なしでそのまま投げる
+            const { data: { text } } = await worker.recognize(canvas);
+            output.innerText = text || "文字が見つかりませんでした";
+            status.innerText = "完了";
+        } catch (e) {
+            output.innerText = "エラー: " + e;
+        }
+        btn.disabled = false;
+    };
+
+    init();
+</script>
+</body>
+</html>
