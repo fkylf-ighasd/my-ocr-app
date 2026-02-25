@@ -3,14 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>帳票スキャナー V4</title>
+    <title>精密帳票スキャナー(反転修正版)</title>
     <style>
-        body { 
-            margin: 0; background: #000; color: #fff; font-family: sans-serif; 
-            overflow: hidden; height: 100dvh; display: flex; flex-direction: column; 
+        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; overflow: hidden; height: 100vh; }
+
+        #main-container {
+            position: relative; width: 100%; height: 100%;
+            display: flex; flex-direction: column;
         }
 
-        /* カメラエリア：可能な限り広く */
         #camera-view {
             position: relative; flex: 1;
             display: flex; align-items: center; justify-content: center;
@@ -19,60 +20,49 @@
         video, #preview-img { position: absolute; width: 100%; height: 100%; object-fit: cover; }
         #preview-img { z-index: 5; display: none; }
 
-        /* --- 精密ガイド：画面の幅いっぱいに広げる --- */
+        /* ガイド：74mm x 210mm の比率を維持 */
         #guide-container {
             position: relative;
-            width: 85vw; /* 画面の横幅85%を使用 */
-            aspect-ratio: 74 / 210; /* 帳票の比率 */
-            border: 3px solid #0f0;
-            box-shadow: 0 0 0 100vmax rgba(0,0,0,0.6);
+            height: 85vh; 
+            aspect-ratio: 74 / 210;
+            border: 2px solid rgba(0, 255, 0, 0.5);
+            box-shadow: 0 0 0 100vmax rgba(0,0,0,0.7);
             z-index: 10;
             pointer-events: none;
         }
 
         .guide-box {
-            position: absolute; border: 2px solid #ff3232;
-            background: rgba(255, 50, 50, 0.2); box-sizing: border-box;
+            position: absolute; border: 1px solid rgba(255, 50, 50, 0.8);
+            background: rgba(255, 50, 50, 0.1); box-sizing: border-box;
         }
         .guide-label {
-            position: absolute; left: 2px; top: -14px; font-size: 10px; 
-            color: #ff3232; font-weight: bold; white-space: nowrap;
+            position: absolute; top: 0; right: -15px; font-size: 9px; 
+            color: #ff3232; writing-mode: vertical-rl;
         }
 
-        /* --- 縦持ちでの配置（紙の左端が画面の左、紙の上端が画面の上） --- */
-        /* 左余白21mm = 21/74 = 28.3% の位置から開始 */
+        /* --- 左右鏡写しを修正 (leftをrightに変更) --- */
+        /* 指示書No: 右から7mm(9.46%) */
+        #g-no { right: 9.46%; top: 10.00%; width: 10.81%; height: 14.29%; }
+        /* 型式: 右から15mm(20.27%) */
+        #g-model { right: 20.27%; top: 10.00%; width: 10.81%; height: 46.67%; }
+        /* 部品名: 右から23mm(31.08%) */
+        #g-part { right: 31.08%; top: 10.00%; width: 10.81%; height: 46.67%; }
         
-        /* 指示書No: 上7mm(3.3%), 左21mm(28.3%), 幅30mm(40.5%), 高さ8mm(3.8%) */
-        #g-no { top: 3.33%; left: 28.37%; width: 40.54%; height: 3.81%; }
-        
-        /* 型式: 上15mm(7.1%), 左21mm(28.3%), 幅9.8cm(はみ出すので右端まで), 高さ8mm(3.8%) */
-        #g-model { top: 7.14%; left: 28.37%; right: 2px; height: 3.81%; }
-        
-        /* 部品名: 上23mm(10.9%), 左21mm(28.3%), 高さ8mm(3.8%) */
-        #g-part { top: 10.95%; left: 28.37%; right: 2px; height: 3.81%; }
-        
-        /* 作業名（9連枠）：上34mm(16.2%)から、1枠20mm(9.5%)ずつ下に並ぶ */
-        .group-container { position: absolute; left: 28.37%; width: 27%; border: none; }
-        #g-work-group { top: 16.19%; height: 85%; }
-        #g-date-group { top: 16.19%; left: 60%; height: 85%; } /* 納期は右側に配置 */
+        /* 作業名・納期：右からの位置を調整 */
+        #g-work-group { right: 45.95%; top: 10.00%; width: 6.76%; height: 85.71%; border: none; background: none;}
+        #g-date-group { right: 59.46%; top: 10.00%; width: 6.76%; height: 85.71%; border: none; background: none;}
 
         .sub-box {
-            position: absolute; left: 0; width: 100%; height: 9.52%; /* 20mm/210mm */
-            border: 1px solid #ff3232; box-sizing: border-box;
+            position: absolute; left: 0; width: 100%;
+            height: 11.11%; border-bottom: 1px dotted rgba(255,50,50,0.5);
         }
 
-        /* --- 操作エリア：スリム化 --- */
-        #controls { 
-            height: 70px; background: #111; display: flex; 
-            flex-direction: column; justify-content: center; align-items: center;
-            z-index: 20;
-        }
-        #status-bar { font-size: 12px; color: #0f0; margin-bottom: 5px; }
+        #controls { padding: 15px; background: #111; text-align: center; z-index: 20; }
+        #status-bar { margin-bottom: 10px; font-size: 13px; color: #0f0; min-height: 1.2em; }
         button#cap-btn {
-            padding: 10px; font-size: 16px; font-weight: bold; border-radius: 5px;
-            border: none; background: #28a745; color: white; width: 80%;
+            padding: 15px; font-size: 18px; font-weight: bold; border-radius: 50px;
+            border: none; background: #28a745; color: white; width: 90%;
         }
-        button:disabled { background: #444; }
     </style>
 </head>
 <body>
@@ -83,22 +73,17 @@
         <img id="preview-img">
         
         <div id="guide-container">
-            <div id="g-no" class="guide-box"><span class="guide-label">No.</span></div>
+            <div id="g-no" class="guide-box"><span class="guide-label">指示書No.</span></div>
             <div id="g-model" class="guide-box"><span class="guide-label">型式</span></div>
             <div id="g-part" class="guide-box"><span class="guide-label">部品名</span></div>
-            
-            <div id="g-work-group" class="group-container">
-                <span class="guide-label" style="top:-14px; left:0;">作業名</span>
-            </div>
-            <div id="g-date-group" class="group-container">
-                <span class="guide-label" style="top:-14px; left:0;">納期</span>
-            </div>
+            <div id="g-work-group" class="guide-box"><span class="guide-label">作業名(9枠)</span></div>
+            <div id="g-date-group" class="guide-box"><span class="guide-label">納期(9枠)</span></div>
         </div>
     </div>
 
     <div id="controls">
-        <div id="status-bar">枠内に帳票を合わせてください</div>
-        <button id="cap-btn" disabled>スキャン実行</button>
+        <div id="status-bar">カメラ準備中...</div>
+        <button id="cap-btn" disabled>帳票をスキャン</button>
     </div>
 </div>
 
@@ -111,17 +96,17 @@
     const status = document.getElementById('status-bar');
     const btn = document.getElementById('cap-btn');
 
-    function createVerticalBoxes(groupId) {
+    function createSubBoxes(groupId) {
         const group = document.getElementById(groupId);
         for (let i = 0; i < 9; i++) {
             const box = document.createElement('div');
             box.className = 'sub-box';
-            box.style.top = (i * 11) + '%'; // 20mm間隔で配置
+            box.style.top = (i * 11.11) + '%';
             group.appendChild(box);
         }
     }
-    createVerticalBoxes('g-work-group');
-    createVerticalBoxes('g-date-group');
+    createSubBoxes('g-work-group');
+    createSubBoxes('g-date-group');
 
     async function initCamera() {
         try {
@@ -129,7 +114,10 @@
                 video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }
             });
             video.srcObject = stream;
-            video.onloadedmetadata = () => { btn.disabled = false; };
+            video.onloadedmetadata = () => {
+                status.innerText = "指示書No.を上にして合わせてください";
+                btn.disabled = false;
+            };
         } catch (err) {
             status.innerText = "カメラエラー";
         }
@@ -138,15 +126,20 @@
     btn.onclick = async () => {
         btn.disabled = true;
         const ctx = canvas.getContext('2d');
-        canvas.width = video.videoHeight;
-        canvas.height = video.videoWidth;
+        const vW = video.videoWidth;
+        const vH = video.videoHeight;
+        
+        canvas.width = vH; 
+        canvas.height = vW;
+
         ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.rotate(-90 * Math.PI / 180);
-        ctx.drawImage(video, -video.videoWidth / 2, -video.videoHeight / 2);
+        ctx.drawImage(video, -vW / 2, -vH / 2);
 
         const base64Data = canvas.toDataURL('image/jpeg', 0.8);
         previewImg.src = base64Data;
         previewImg.style.display = 'block';
+
         const size = Math.round((base64Data.length * 0.75) / 1024);
         status.innerText = `送信完了 (${size}KB)`;
 
@@ -155,6 +148,7 @@
             btn.disabled = false;
         }, 1000);
     };
+
     window.onload = initCamera;
 </script>
 </body>
