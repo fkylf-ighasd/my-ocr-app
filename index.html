@@ -139,15 +139,20 @@
 // ※ここにデプロイしたURLを貼り付けてください
     const GAS_URL = "https://script.google.com/macros/s/AKfycbzY9KvGkYZDUG_9IFy5q91cj5A0jnpePuGIDLfaUG8nY9Gx7jDuEMY5lyoazQMNmzFBsg/exec";
     
-   btn.onclick = async () => {
-        btn.disabled = true;
-        status.innerText = "解析中...";
+btn.onclick = async () => {
+        if (!worker) {
+            status.innerText = "エラー: OCRエンジンが未起動です";
+            return;
+        }
 
-        // --- 1. 画像のキャプチャと回転 (以前と同様) ---
+        btn.disabled = true;
+        status.innerText = "1/3 画像を準備中...";
+
+        // 1. 画像のキャプチャと回転
         const vW = video.videoWidth;
         const vH = video.videoHeight;
-        canvasUpload.width = vH;  // 回転後の横幅
-        canvasUpload.height = vW; // 回転後の縦幅
+        canvasUpload.width = vH; 
+        canvasUpload.height = vW;
         const ctxU = canvasUpload.getContext('2d');
         ctxU.translate(canvasUpload.width / 2, canvasUpload.height / 2);
         ctxU.rotate(-90 * Math.PI / 180);
@@ -157,58 +162,65 @@
         previewImg.src = canvasUpload.toDataURL('image/jpeg');
         previewImg.style.display = 'block';
 
-        // --- 2. 各エリアの切り抜き解析関数 ---
-        async function getAreaText(rectPercent) {
-            const tempCanvas = document.createElement('canvas');
-            const tCtx = tempCanvas.getContext('2d');
-            
-            // %座標をピクセルに変換
-            // 注：ガイドは右(right)基準なので計算を合わせる
-            const w = (rectPercent.w / 100) * canvasUpload.width;
-            const h = (rectPercent.h / 100) * canvasUpload.height;
-            const x = canvasUpload.width - ((rectPercent.right / 100) * canvasUpload.width) - w;
-            const y = (rectPercent.top / 100) * canvasUpload.height;
+        // 解析設定（CSSのガイド位置と連動）
+        // ※枠線を踏まないよう、少し内側を抜くように調整済み
+        const areas = [
+            { id: 'no',    label: 'No.',   right: 9.46,  top: 10, w: 10.81, h: 14.29 },
+            { id: 'model', label: '型式',  right: 20.27, top: 10, w: 10.81, h: 46.67 },
+            { id: 'part',  label: '部品名', right: 31.08, top: 10, w: 10.81, h: 46.67 }
+        ];
 
-            tempCanvas.width = w;
-            tempCanvas.height = h;
-            tCtx.drawImage(canvasUpload, x, y, w, h, 0, 0, w, h);
-
-            const { data: { text } } = await worker.recognize(tempCanvas);
-            return text.trim();
-        }
+        const results = {};
 
         try {
-            // --- 3. 各項目を順番に解析 ---
-            // 座標データ（UIのCSS設定と合わせる）
-            const results = {
-                no:    await getAreaText({ right: 9.46,  top: 10, w: 10.81, h: 14.29 }),
-                model: await getAreaText({ right: 20.27, top: 10, w: 10.81, h: 46.67 }),
-                part:  await getAreaText({ right: 31.08, top: 10, w: 10.81, h: 46.67 }),
-                // 作業枠と納期枠（代表して1つずつ。本来はループで回す）
-                works: [await getAreaText({ right: 45.95, top: 10, w: 6.76, h: 8.5 })], 
-                dates: [await getAreaText({ right: 59.46, top: 10, w: 6.76, h: 8.5 })]
+            // 2. 順番に解析（ループで1つずつ await する）
+            for (let i = 0; i < areas.length; i++) {
+                const area = areas[i];
+                status.innerText = `${i + 1}/${areas.length + 1} ${area.label}を解析中...`;
+
+                const tempCanvas = document.createElement('canvas');
+                const tCtx = tempCanvas.getContext('2d');
+                
+                // ピクセル換算
+                const imgW = canvasUpload.width;
+                const imgH = canvasUpload.height;
+                const w = Math.floor((area.w / 100) * imgW);
+                const h = Math.floor((area.h / 100) * imgH);
+                // ガイドが右(right)基準なので、X座標を計算
+                const x = Math.floor(imgW - ((area.right / 100) * imgW) - w);
+                const y = Math.floor((area.top / 100) * imgH);
+
+                tempCanvas.width = w;
+                tempCanvas.height = h;
+                tCtx.drawImage(canvasUpload, x, y, w, h, 0, 0, w, h);
+
+                // OCR実行 (1つずつ順番に)
+                const { data: { text } } = await worker.recognize(tempCanvas);
+                results[area.id] = text.trim();
+                console.log(`${area.label}の結果:`, text.trim());
+            }
+
+            // 3. GAS送信
+            status.innerText = "スプレッドシートに保存中...";
+            const payload = {
+                no: results.no || "",
+                model: results.model || "",
+                part: results.part || "",
+                fullText: "Area OCR"
             };
 
-            console.log("解析完了:", results);
-
-            // --- 4. GASへ送信 ---
-            status.innerText = "送信中...";
             await fetch(GAS_URL, {
                 method: "POST",
                 mode: "no-cors",
-                body: JSON.stringify({
-                    no: results.no,
-                    model: results.model,
-                    part: results.part,
-                    works: results.works,
-                    dates: results.dates,
-                    fullText: "Area OCR Used"
-                })
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
             });
 
             status.innerText = "保存完了！";
+
         } catch (e) {
-            status.innerText = "失敗: " + e;
+            console.error(e);
+            status.innerText = "エラーが発生しました";
         }
 
         setTimeout(() => {
