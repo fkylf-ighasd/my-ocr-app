@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>精密帳票スキャナー(反転修正版)</title>
+    <title>精密帳票スキャナー(UI改善版)</title>
     <style>
         body { margin: 0; background: #000; color: #fff; font-family: sans-serif; overflow: hidden; height: 100vh; }
 
@@ -20,10 +20,10 @@
         video, #preview-img { position: absolute; width: 100%; height: 100%; object-fit: cover; }
         #preview-img { z-index: 5; display: none; }
 
-        /* ガイド：74mm x 210mm の比率を維持 */
+        /* ガイド：位置はそのままで鏡写し修正済み */
         #guide-container {
             position: relative;
-            height: 85vh; 
+            height: 90vh; 
             aspect-ratio: 74 / 210;
             border: 2px solid rgba(0, 255, 0, 0.5);
             box-shadow: 0 0 0 100vmax rgba(0,0,0,0.7);
@@ -40,15 +40,9 @@
             color: #ff3232; writing-mode: vertical-rl;
         }
 
-        /* --- 左右鏡写しを修正 (leftをrightに変更) --- */
-        /* 指示書No: 右から7mm(9.46%) */
         #g-no { right: 9.46%; top: 10.00%; width: 10.81%; height: 14.29%; }
-        /* 型式: 右から15mm(20.27%) */
         #g-model { right: 20.27%; top: 10.00%; width: 10.81%; height: 46.67%; }
-        /* 部品名: 右から23mm(31.08%) */
         #g-part { right: 31.08%; top: 10.00%; width: 10.81%; height: 46.67%; }
-        
-        /* 作業名・納期：右からの位置を調整 */
         #g-work-group { right: 45.95%; top: 10.00%; width: 6.76%; height: 85.71%; border: none; background: none;}
         #g-date-group { right: 59.46%; top: 10.00%; width: 6.76%; height: 85.71%; border: none; background: none;}
 
@@ -57,12 +51,36 @@
             height: 11.11%; border-bottom: 1px dotted rgba(255,50,50,0.5);
         }
 
-        #controls { padding: 15px; background: #111; text-align: center; z-index: 20; }
-        #status-bar { margin-bottom: 10px; font-size: 13px; color: #0f0; min-height: 1.2em; }
-        button#cap-btn {
-            padding: 15px; font-size: 18px; font-weight: bold; border-radius: 50px;
-            border: none; background: #28a745; color: white; width: 90%;
+        /* --- UI：ボタンを半透明にしてガイドに被せる --- */
+        #controls { 
+            position: absolute; /* 浮かせる */
+            bottom: 30px; /* 画面下から30pxの位置 */
+            left: 50%;
+            transform: translateX(-50%); /* 中央寄せ */
+            width: 100%;
+            text-align: center;
+            z-index: 30; /* ガイドより前面に */
         }
+        #status-bar { 
+            margin-bottom: 10px; font-size: 13px; color: #0f0; 
+            text-shadow: 1px 1px 2px #000; /* 文字を見やすく */
+        }
+        button#cap-btn {
+            padding: 18px; 
+            font-size: 18px; 
+            font-weight: bold; 
+            border-radius: 50px;
+            border: 2px solid rgba(255, 255, 255, 0.5); /* 白い枠線 */
+            background: rgba(40, 167, 69, 0.5); /* 緑の半透明（0.5） */
+            color: white; 
+            width: 80%;
+            backdrop-filter: blur(4px); /* 背景を少しぼかして高級感を出す */
+            -webkit-backdrop-filter: blur(4px);
+        }
+        button:active {
+            background: rgba(40, 167, 69, 0.8); /* 押した時は濃くする */
+        }
+        button:disabled { background: rgba(68, 68, 68, 0.5); }
     </style>
 </head>
 <body>
@@ -90,6 +108,7 @@
 <canvas id="canvas" style="display:none;"></canvas>
 
 <script>
+    // JS部分は以前のものをそのまま維持
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const previewImg = document.getElementById('preview-img');
@@ -128,10 +147,8 @@
         const ctx = canvas.getContext('2d');
         const vW = video.videoWidth;
         const vH = video.videoHeight;
-        
         canvas.width = vH; 
         canvas.height = vW;
-
         ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.rotate(-90 * Math.PI / 180);
         ctx.drawImage(video, -vW / 2, -vH / 2);
@@ -139,13 +156,13 @@
         const base64Data = canvas.toDataURL('image/jpeg', 0.8);
         previewImg.src = base64Data;
         previewImg.style.display = 'block';
-
         const size = Math.round((base64Data.length * 0.75) / 1024);
         status.innerText = `送信完了 (${size}KB)`;
 
         setTimeout(() => {
             previewImg.style.display = 'none';
             btn.disabled = false;
+            status.innerText = "次の帳票をスキャンできます";
         }, 1000);
     };
 
