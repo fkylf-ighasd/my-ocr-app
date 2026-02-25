@@ -2,213 +2,68 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>精密帳票OCR</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR診断モード</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
-        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; overflow: hidden; height: 100dvh; }
-        #main-container { position: relative; width: 100%; height: 100dvh; }
-        
-        /* カメラ映像 */
-        #camera-view { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; }
-        video, #preview-img { width: 100%; height: 100%; object-fit: cover; }
-        #preview-img { position: absolute; top: 0; left: 0; z-index: 5; display: none; }
-
-        /* ガイド */
-        #guide-container {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            height: 80dvh; aspect-ratio: 74 / 210;
-            border: 2px solid rgba(0, 255, 0, 0.5);
-            box-shadow: 0 0 0 100vmax rgba(0,0,0,0.7);
-            z-index: 10; pointer-events: none;
-        }
-        .guide-box { position: absolute; border: 1px solid rgba(255, 50, 50, 0.8); background: rgba(255, 50, 50, 0.1); }
-        #g-no { right: 9.46%; top: 10%; width: 10.81%; height: 14.29%; }
-        #g-model { right: 20.27%; top: 10%; width: 10.81%; height: 46.67%; }
-        #g-part { right: 31.08%; top: 10%; width: 10.81%; height: 46.67%; }
-
-        /* UIエリア：ここを見やすく修正 */
-        #controls { 
-            position: absolute; bottom: 30px; left: 0; width: 100%; 
-            text-align: center; z-index: 30; 
-        }
-        #status-bar { 
-            background: rgba(0,0,0,0.7); display: inline-block; padding: 5px 15px;
-            margin-bottom: 10px; font-size: 14px; color: #0f0; border-radius: 10px;
-        }
-        button#cap-btn {
-            display: block; margin: 0 auto; width: 80%; padding: 18px; 
-            font-size: 18px; font-weight: bold; border-radius: 50px;
-            border: 2px solid #fff; background: rgba(40, 167, 69, 0.8); color: #fff;
-        }
-        button:disabled { background: #444; border-color: #666; }
+        body { margin: 0; background: #222; color: #fff; text-align: center; font-family: sans-serif; }
+        video { width: 100%; max-height: 50vh; background: #000; }
+        #output { background: #000; padding: 10px; height: 30vh; overflow-y: scroll; font-size: 12px; text-align: left; color: #0f0; border: 1px solid #555; margin: 10px; }
+        button { padding: 20px; width: 80%; font-size: 18px; font-weight: bold; background: #28a745; color: white; border: none; border-radius: 10px; }
     </style>
 </head>
 <body>
 
-<div id="main-container">
-    <div id="camera-view">
-        <video id="video" autoplay playsinline muted></video>
-        <img id="preview-img">
-        <div id="guide-container">
-            <div id="g-no" class="guide-box"></div>
-            <div id="g-model" class="guide-box"></div>
-            <div id="g-part" class="guide-box"></div>
-        </div>
-    </div>
-    
-    <div id="controls">
-        <div id="status-bar">初期化中...</div>
-        <button id="cap-btn" disabled>スキャン開始</button>
-    </div>
-</div>
-
-<canvas id="canvas-upload" style="display:none;"></canvas>
+<h3>OCR診断モード</h3>
+<video id="video" autoplay playsinline muted></video>
+<div id="status">エンジン起動中...</div>
+<button id="cap-btn" disabled>テスト撮影</button>
+<div id="output">【ここに解析結果が出ます】</div>
+<canvas id="canvas" style="display:none;"></canvas>
 
 <script>
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbzY9KvGkYZDUG_9IFy5q91cj5A0jnpePuGIDLfaUG8nY9Gx7jDuEMY5lyoazQMNmzFBsg/exec";
     const video = document.getElementById('video');
-    const status = document.getElementById('status-bar');
+    const status = document.getElementById('status');
+    const output = document.getElementById('output');
     const btn = document.getElementById('cap-btn');
-    const previewImg = document.getElementById('preview-img');
-    const canvasUpload = document.getElementById('canvas-upload');
-
+    const canvas = document.getElementById('canvas');
     let worker = null;
 
-    // OCRエンジンの初期化
-    async function initOCR() {
-        try {
-            status.innerText = "OCRエンジン起動中...";
-            worker = await Tesseract.createWorker('jpn');
-            status.innerText = "準備完了";
-            btn.disabled = false;
-        } catch (e) {
-            status.innerText = "OCR起動失敗。再読み込みしてください";
-            console.error(e);
-        }
+    async function init() {
+        // 1. カメラ起動
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        video.srcObject = stream;
+
+        // 2. OCR起動
+        status.innerText = "学習データ読み込み中...";
+        worker = await Tesseract.createWorker('jpn'); // まずは日本語
+        status.innerText = "準備完了。書類を撮ってください";
+        btn.disabled = false;
     }
 
-    // カメラの初期化
-    async function initCamera() {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }
-            });
-            video.srcObject = stream;
-            await initOCR();
-        } catch (err) {
-            status.innerText = "カメラを許可してください";
-        }
-    }
-
-   btn.onclick = async () => {
+    btn.onclick = async () => {
         btn.disabled = true;
-        status.innerText = "解析中...";
+        status.innerText = "解析中...（10秒ほど待機）";
+        output.innerText = "読み取り開始...";
 
-        // 1. 【重要】ビデオの表示上のサイズと実際の解像度の比率を計算
-        const vW = video.videoWidth;
-        const vH = video.videoHeight;
-        
-        // 画面上のビデオの表示サイズを取得
-        const rect = video.getBoundingClientRect();
-        
-        // キャンバスを「画面で見ている通り」の比率で作成
-        // 縦持ちなので、最終的な解析用画像は 横:vH x 縦:vW になる
-        canvasUpload.width = vH; 
-        canvasUpload.height = vW;
-        const ctx = canvasUpload.getContext('2d');
+        // キャンバスにそのまま描画
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
 
-        // 回転処理
-        ctx.translate(canvasUpload.width / 2, canvasUpload.height / 2);
-        ctx.rotate(-90 * Math.PI / 180);
-
-        // object-fit: cover を考慮した描画計算
-        // これにより、画面で見ているガイド枠内の映像と、キャンバス内の位置が一致します
-        const sRatio = vW / vH;
-        const bRatio = rect.width / rect.height;
-        let sw, sh, sx, sy;
-        if (sRatio > bRatio) {
-            sh = vH; sw = vH * bRatio;
-            sx = (vW - sw) / 2; sy = 0;
-        } else {
-            sw = vW; sh = vW / bRatio;
-            sx = 0; sy = (vH - sh) / 2;
-        }
-
-        ctx.drawImage(video, sx, sy, sw, sh, -vW/2, -vH/2, vW, vH);
-
-        // 停止画像を表示（これで画面と一致するはずです）
-        previewImg.src = canvasUpload.toDataURL('image/jpeg');
-        previewImg.style.display = 'block';
-        previewImg.style.objectFit = 'contain'; // 画面に収まるように表示
-
-        // --- 2. 解析エリアの指定（座標計算を見直し） ---
-        // ガイドが「縦長の画面」に対しての%なので、そのまま適用可能になります
-        const areas = [
-            { id: 'no',    label: 'No.',   r: 9.46,  t: 10, w: 10.81, h: 14.29, white: '0123456789' },
-            { id: 'model', label: '型式',  r: 20.27, t: 10, w: 10.81, h: 46.67, white: '' },
-            { id: 'part',  label: '部品名', r: 31.08, t: 10, w: 10.81, h: 46.67, white: '' }
-        ];
-
-        // ...（以下、ループ解析とGAS送信は以前と同じ）
-
-    const results = {};
-
-    try {
-        for (let i = 0; i < areas.length; i++) {
-            const a = areas[i];
-            status.innerText = `${a.label}を読取中...`;
-
-            const tmp = document.createElement('canvas');
-            const tCtx = tmp.getContext('2d');
-            
-            // 座標計算（枠線を踏まないようさらに0.2-0.5%内側へ）
-            const w = Math.floor((a.w/100) * canvasUpload.width);
-            const h = Math.floor((a.h/100) * canvasUpload.height);
-            const x = Math.floor(canvasUpload.width - ((a.r/100) * canvasUpload.width) - w);
-            const y = Math.floor((a.t/100) * canvasUpload.height);
-
-            tmp.width = w; tmp.height = h;
-
-            // 画像処理：コントラストを上げるためのグレースケール化
-            tCtx.filter = 'grayscale(1) contrast(1.2)'; 
-            tCtx.drawImage(canvasUpload, x, y, w, h, 0, 0, w, h);
-
-            // OCR実行（ホワイトリストを適用）
-            const options = a.whitelist ? { tessedit_char_whitelist: a.whitelist } : {};
-            const { data: { text } } = await worker.recognize(tmp, options);
-            
-            // 改行やゴミを除去
-            results[a.id] = text.replace(/[\s\n\r]/g, ""); 
-        }
-
-        // ...（以下、GAS送信部分はそのまま）
-
-            status.innerText = "シートに送信中...";
-            await fetch(GAS_URL, {
-                method: "POST",
-                mode: "no-cors",
-                body: JSON.stringify({
-                    no: results.no,
-                    model: results.model,
-                    part: results.part,
-                    fullText: "Area OCR"
-                })
-            });
-
-            status.innerText = "保存完了！";
+        try {
+            // 回転なし、加工なしでそのまま投げる
+            const { data: { text } } = await worker.recognize(canvas);
+            output.innerText = text || "文字が見つかりませんでした";
+            status.innerText = "完了";
         } catch (e) {
-            status.innerText = "エラー発生";
+            output.innerText = "エラー: " + e;
         }
-
-        setTimeout(() => {
-            previewImg.style.display = 'none';
-            btn.disabled = false;
-            status.innerText = "準備完了";
-        }, 1500);
+        btn.disabled = false;
     };
 
-    window.onload = initCamera;
+    init();
 </script>
 </body>
 </html>
