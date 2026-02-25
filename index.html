@@ -3,71 +3,75 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>精密帳票スキャナー(縦持ち専用)</title>
+    <title>精密帳票スキャナー</title>
     <style>
-        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; overflow: hidden; height: 100vh; }
-
-        /* --- メインコンテナ --- */
-        #main-container {
-            position: relative; width: 100%; height: 100%;
-            display: flex; flex-direction: column;
+        /* 画面全体の設定：はみ出し防止 */
+        body { 
+            margin: 0; background: #000; color: #fff; font-family: sans-serif; 
+            overflow: hidden; height: 100dvh; display: flex; flex-direction: column; 
         }
 
-        /* カメラエリア */
+        /* カメラ表示エリア：ボタンを押し出すため、ここを可変にする */
         #camera-view {
-            position: relative; flex: 1;
+            position: relative; 
+            flex: 1; /* 余ったスペースをすべて使う */
             display: flex; align-items: center; justify-content: center;
             overflow: hidden;
         }
         video, #preview-img { position: absolute; width: 100%; height: 100%; object-fit: cover; }
         #preview-img { z-index: 5; display: none; }
 
-        /* --- 精密ガイド(縦向き: 74mm x 210mm) --- */
+        /* --- 精密ガイド(縦長比率 74:210) --- */
         #guide-container {
             position: relative;
-            /* 画面の縦横比に合わせて最大化（縦長） */
-            height: 90vh; 
+            height: 80%; /* 画面の8割に抑えてボタンのための余白を作る */
             aspect-ratio: 74 / 210;
-            border: 2px solid rgba(0, 255, 0, 0.5);
+            border: 2px solid rgba(0, 255, 0, 0.7);
             box-shadow: 0 0 0 100vmax rgba(0,0,0,0.7);
             z-index: 10;
             pointer-events: none;
         }
 
         .guide-box {
-            position: absolute; border: 1px solid rgba(255, 50, 50, 0.8);
+            position: absolute; border: 1px solid rgba(255, 50, 50, 0.9);
             background: rgba(255, 50, 50, 0.1); box-sizing: border-box;
         }
         .guide-label {
-            position: absolute; top: 0; left: -15px; font-size: 9px; 
-            color: #ff3232; writing-mode: vertical-rl; transform: rotate(180deg);
+            position: absolute; right: 2px; top: 2px; font-size: 8px; color: #ff3232;
+            white-space: nowrap; transform: rotate(90deg); transform-origin: top right;
         }
 
-        /* --- 縦画面用座標 (元の横座標を入れ替え) --- */
-        /* 指示書No: 左から7mm, 上から21mm, 幅8mm, 高さ30mm */
-        #g-no { left: 9.46%; top: 10.00%; width: 10.81%; height: 14.29%; }
-        /* 型式: 左から15mm, 上から21mm, 幅8mm, 高さ98mm */
-        #g-model { left: 20.27%; top: 10.00%; width: 10.81%; height: 46.67%; }
-        /* 部品名: 左から23mm, 上から21mm, 幅8mm, 高さ98mm */
-        #g-part { left: 31.08%; top: 10.00%; width: 10.81%; height: 46.67%; }
+        /* --- 鏡写しの修正：leftではなくright基準で配置 --- */
+        /* 指示書No: 紙の上から7mm(→画面右から9.4%) */
+        #g-no { right: 9.46%; top: 10.00%; width: 10.81%; height: 14.29%; }
+        /* 型式: 紙の上から15mm(→画面右から20.2%) */
+        #g-model { right: 20.27%; top: 10.00%; width: 10.81%; height: 46.67%; }
+        /* 部品名: 紙の上から23mm(→画面右から31.0%) */
+        #g-part { right: 31.08%; top: 10.00%; width: 10.81%; height: 46.67%; }
         
         /* 作業名・納期コンテナ */
-        #g-work-group { left: 45.95%; top: 10.00%; width: 6.76%; height: 85.71%; border: none; background: none;}
-        #g-date-group { left: 59.46%; top: 10.00%; width: 6.76%; height: 85.71%; border: none; background: none;}
+        #g-work-group { right: 45.95%; top: 10.00%; width: 6.76%; height: 85.71%; border: none; background: none;}
+        #g-date-group { right: 59.46%; top: 10.00%; width: 6.76%; height: 85.71%; border: none; background: none;}
 
         .sub-box {
-            position: absolute; left: 0; width: 100%;
-            height: 11.11%; border-bottom: 1px dotted rgba(255,50,50,0.5);
+            position: absolute; left: 0; width: 100%; height: 11.11%; 
+            border-bottom: 1px dotted rgba(255,50,50,0.5);
         }
 
-        /* --- UI --- */
-        #controls { padding: 15px; background: #111; text-align: center; z-index: 20; }
-        #status-bar { margin-bottom: 10px; font-size: 13px; color: #0f0; min-height: 1.2em; }
-        button#cap-btn {
-            padding: 15px; font-size: 18px; font-weight: bold; border-radius: 50px;
-            border: none; background: #28a745; color: white; width: 90%;
+        /* --- UI：画面下部に固定 --- */
+        #controls { 
+            height: 120px; /* 高さをしっかり確保 */
+            background: #111; text-align: center; display: flex; 
+            flex-direction: column; justify-content: center; align-items: center;
+            z-index: 20; border-top: 1px solid #333;
         }
-        button:disabled { background: #444; }
+        #status-bar { margin-bottom: 8px; font-size: 13px; color: #0f0; }
+        button#cap-btn {
+            padding: 15px 0; font-size: 18px; font-weight: bold; border-radius: 10px;
+            border: none; background: #28a745; color: white; width: 85%;
+            box-shadow: 0 4px 0 #1e7e34;
+        }
+        button:active { transform: translateY(2px); box-shadow: 0 2px 0 #1e7e34; }
     </style>
 </head>
 <body>
@@ -78,17 +82,17 @@
         <img id="preview-img">
         
         <div id="guide-container">
-            <div id="g-no" class="guide-box"><span class="guide-label">指示書No.</span></div>
+            <div id="g-no" class="guide-box"><span class="guide-label">No.</span></div>
             <div id="g-model" class="guide-box"><span class="guide-label">型式</span></div>
             <div id="g-part" class="guide-box"><span class="guide-label">部品名</span></div>
-            <div id="g-work-group" class="guide-box"><span class="guide-label">作業名(9枠)</span></div>
-            <div id="g-date-group" class="guide-box"><span class="guide-label">納期(9枠)</span></div>
+            <div id="g-work-group" class="guide-box"><span class="guide-label">作業名</span></div>
+            <div id="g-date-group" class="guide-box"><span class="guide-label">納期</span></div>
         </div>
     </div>
 
     <div id="controls">
-        <div id="status-bar">カメラ準備中...</div>
-        <button id="cap-btn" disabled>帳票をスキャン</button>
+        <div id="status-bar">帳票の左端を上にして合わせてください</div>
+        <button id="cap-btn" disabled>スキャン実行</button>
     </div>
 </div>
 
@@ -101,7 +105,6 @@
     const status = document.getElementById('status-bar');
     const btn = document.getElementById('cap-btn');
 
-    // 9連枠生成
     function createSubBoxes(groupId) {
         const group = document.getElementById(groupId);
         for (let i = 0; i < 9; i++) {
@@ -120,12 +123,9 @@
                 video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }
             });
             video.srcObject = stream;
-            video.onloadedmetadata = () => {
-                status.innerText = "指示書No.を上にして合わせてください";
-                btn.disabled = false;
-            };
+            video.onloadedmetadata = () => { btn.disabled = false; };
         } catch (err) {
-            status.innerText = "カメラエラー";
+            status.innerText = "カメラ起動エラー";
         }
     }
 
@@ -133,21 +133,13 @@
         btn.disabled = true;
         const ctx = canvas.getContext('2d');
 
-        // --- 画像の回転処理 ---
-        // 縦で撮った映像(H > W)を、横長(W > H)の画像として保存する
-        const vW = video.videoWidth;
-        const vH = video.videoHeight;
-        
-        // キャンバスのサイズを入れ替える（横長にする）
-        canvas.width = vH; 
-        canvas.height = vW;
-
-        // 中心を軸に-90度回転
+        // 回転処理：縦の映像を「左に90度」回転させて横長画像にする
+        canvas.width = video.videoHeight;
+        canvas.height = video.videoWidth;
         ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.rotate(-90 * Math.PI / 180);
-        ctx.drawImage(video, -vW / 2, -vH / 2);
+        ctx.drawImage(video, -video.videoWidth / 2, -video.videoHeight / 2);
 
-        // フィードバック表示
         const base64Data = canvas.toDataURL('image/jpeg', 0.8);
         previewImg.src = base64Data;
         previewImg.style.display = 'block';
@@ -158,7 +150,6 @@
         setTimeout(() => {
             previewImg.style.display = 'none';
             btn.disabled = false;
-            status.innerText = "次の帳票をスキャンできます";
         }, 1000);
     };
 
