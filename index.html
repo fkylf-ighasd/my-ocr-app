@@ -118,32 +118,46 @@
         previewImg.style.display = 'block';
 
         // 解析エリア設定
-        const areas = [
-            { id: 'no',    label: 'No.',   r: 9.46,  t: 10, w: 10.81, h: 14.29 },
-            { id: 'model', label: '型式',  r: 20.27, t: 10, w: 10.81, h: 46.67 },
-            { id: 'part',  label: '部品名', r: 31.08, t: 10, w: 10.81, h: 46.67 }
-        ];
+       // ...（中略：キャプチャ部分はそのまま）
 
-        const results = {};
+    // 解析エリアと、それぞれの「読み取りルール」を設定
+    const areas = [
+        { id: 'no',    label: 'No.',   r: 9.6,  t: 10.5, w: 10.4, h: 13.5, whitelist: '0123456789' }, // 数字のみ
+        { id: 'model', label: '型式',  r: 20.4, t: 10.5, w: 10.4, h: 45.5, whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-' }, // 英数
+        { id: 'part',  label: '部品名', r: 31.2, t: 10.5, w: 10.4, h: 45.5, whitelist: '' } // 制限なし
+    ];
 
-        try {
-            for (let i = 0; i < areas.length; i++) {
-                const a = areas[i];
-                status.innerText = `${a.label}を読取中...`;
+    const results = {};
 
-                const tmp = document.createElement('canvas');
-                const tCtx = tmp.getContext('2d');
-                const w = Math.floor((a.w/100) * canvasUpload.width);
-                const h = Math.floor((a.h/100) * canvasUpload.height);
-                const x = Math.floor(canvasUpload.width - ((a.r/100) * canvasUpload.width) - w);
-                const y = Math.floor((a.t/100) * canvasUpload.height);
+    try {
+        for (let i = 0; i < areas.length; i++) {
+            const a = areas[i];
+            status.innerText = `${a.label}を読取中...`;
 
-                tmp.width = w; tmp.height = h;
-                tCtx.drawImage(canvasUpload, x, y, w, h, 0, 0, w, h);
+            const tmp = document.createElement('canvas');
+            const tCtx = tmp.getContext('2d');
+            
+            // 座標計算（枠線を踏まないようさらに0.2-0.5%内側へ）
+            const w = Math.floor((a.w/100) * canvasUpload.width);
+            const h = Math.floor((a.h/100) * canvasUpload.height);
+            const x = Math.floor(canvasUpload.width - ((a.r/100) * canvasUpload.width) - w);
+            const y = Math.floor((a.t/100) * canvasUpload.height);
 
-                const { data: { text } } = await worker.recognize(tmp);
-                results[a.id] = text.trim();
-            }
+            tmp.width = w; tmp.height = h;
+
+            // 画像処理：コントラストを上げるためのグレースケール化
+            tCtx.filter = 'grayscale(1) contrast(1.2)'; 
+            tCtx.drawImage(canvasUpload, x, y, w, h, 0, 0, w, h);
+
+            // OCR実行（ホワイトリストを適用）
+            const options = a.whitelist ? { tessedit_char_whitelist: a.whitelist } : {};
+            const { data: { text } } = await worker.recognize(tmp, options);
+            
+            // 改行やゴミを除去
+            results[a.id] = text.replace(/[\s\n\r]/g, ""); 
+        }
+
+        // ...（以下、GAS送信部分はそのまま）
 
             status.innerText = "シートに送信中...";
             await fetch(GAS_URL, {
