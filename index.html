@@ -3,72 +3,74 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>帳票スキャナー V3</title>
+    <title>帳票スキャナー V4</title>
     <style>
         body { 
             margin: 0; background: #000; color: #fff; font-family: sans-serif; 
             overflow: hidden; height: 100dvh; display: flex; flex-direction: column; 
         }
 
-        /* 1. カメラエリアを最大化 */
+        /* カメラエリア：可能な限り広く */
         #camera-view {
             position: relative; flex: 1;
             display: flex; align-items: center; justify-content: center;
-            overflow: hidden; background: #000;
+            overflow: hidden;
         }
         video, #preview-img { position: absolute; width: 100%; height: 100%; object-fit: cover; }
-        #preview-img { z-index: 5; display: none; border: 2px solid #0f0; }
+        #preview-img { z-index: 5; display: none; }
 
-        /* 2. 精密ガイド (縦 210mm : 横 74mm の比率) */
+        /* --- 精密ガイド：画面の幅いっぱいに広げる --- */
         #guide-container {
             position: relative;
-            height: 95%; /* 画面の高さに合わせる */
+            width: 85vw; /* 画面の横幅85%を使用 */
             aspect-ratio: 74 / 210; /* 帳票の比率 */
-            border: 2px solid rgba(0, 255, 0, 0.8);
-            box-shadow: 0 0 0 100vmax rgba(0,0,0,0.5);
+            border: 3px solid #0f0;
+            box-shadow: 0 0 0 100vmax rgba(0,0,0,0.6);
             z-index: 10;
             pointer-events: none;
         }
 
-        /* ガイド枠の共通設定 */
         .guide-box {
             position: absolute; border: 2px solid #ff3232;
             background: rgba(255, 50, 50, 0.2); box-sizing: border-box;
         }
         .guide-label {
-            position: absolute; left: 105%; top: 0; font-size: 10px; color: #ff3232;
-            white-space: nowrap; font-weight: bold; background: rgba(0,0,0,0.5); padding: 1px 3px;
+            position: absolute; left: 2px; top: -14px; font-size: 10px; 
+            color: #ff3232; font-weight: bold; white-space: nowrap;
         }
 
-        /* --- 縦持ち状態での精密座標計算 (横幅74mm, 縦長210mm) --- */
-        /* 指示書No: 左から21mm, 上から7mm, 幅30mm, 高さ8mm */
-        #g-no { left: 28.37%; top: 3.33%; width: 40.54%; height: 3.81%; }
-        /* 型式: 左から21mm, 上から15mm, 幅98mm(74mm幅に収まるよう調整), 高さ8mm */
-        /* ※横幅74mmに対し21mm+98mmははみ出すため、右端まで表示 */
-        #g-model { left: 28.37%; top: 7.14%; width: 71.63%; height: 3.81%; }
-        /* 部品名: 左から21mm, 上から23mm */
-        #g-part { left: 28.37%; top: 10.95%; width: 71.63%; height: 3.81%; }
+        /* --- 縦持ちでの配置（紙の左端が画面の左、紙の上端が画面の上） --- */
+        /* 左余白21mm = 21/74 = 28.3% の位置から開始 */
         
-        /* 作業名: 左から21mm, 上から34mm, 高さ5mm */
-        #g-work-group { left: 28.37%; top: 16.19%; width: 71.63%; height: 2.38%; border: none; background: none;}
-        /* 納期: 左から21mm, 上から44mm, 高さ5mm */
-        #g-date-group { left: 28.37%; top: 20.95%; width: 71.63%; height: 2.38%; border: none; background: none;}
+        /* 指示書No: 上7mm(3.3%), 左21mm(28.3%), 幅30mm(40.5%), 高さ8mm(3.8%) */
+        #g-no { top: 3.33%; left: 28.37%; width: 40.54%; height: 3.81%; }
+        
+        /* 型式: 上15mm(7.1%), 左21mm(28.3%), 幅9.8cm(はみ出すので右端まで), 高さ8mm(3.8%) */
+        #g-model { top: 7.14%; left: 28.37%; right: 2px; height: 3.81%; }
+        
+        /* 部品名: 上23mm(10.9%), 左21mm(28.3%), 高さ8mm(3.8%) */
+        #g-part { top: 10.95%; left: 28.37%; right: 2px; height: 3.81%; }
+        
+        /* 作業名（9連枠）：上34mm(16.2%)から、1枠20mm(9.5%)ずつ下に並ぶ */
+        .group-container { position: absolute; left: 28.37%; width: 27%; border: none; }
+        #g-work-group { top: 16.19%; height: 85%; }
+        #g-date-group { top: 16.19%; left: 60%; height: 85%; } /* 納期は右側に配置 */
 
         .sub-box {
-            position: absolute; left: 0; width: 27.9%; /* 20mm/74mm = 27% */
-            height: 100%; border: 1px solid #ff3232; box-sizing: border-box;
+            position: absolute; left: 0; width: 100%; height: 9.52%; /* 20mm/210mm */
+            border: 1px solid #ff3232; box-sizing: border-box;
         }
 
-        /* 3. ボタンエリアをコンパクトに (高さ80px) */
+        /* --- 操作エリア：スリム化 --- */
         #controls { 
-            height: 80px; background: #111; display: flex; 
+            height: 70px; background: #111; display: flex; 
             flex-direction: column; justify-content: center; align-items: center;
-            z-index: 20; border-top: 1px solid #333;
+            z-index: 20;
         }
-        #status-bar { margin-bottom: 5px; font-size: 11px; color: #0f0; }
+        #status-bar { font-size: 12px; color: #0f0; margin-bottom: 5px; }
         button#cap-btn {
-            padding: 10px 0; font-size: 16px; font-weight: bold; border-radius: 8px;
-            border: none; background: #28a745; color: white; width: 90%;
+            padding: 10px; font-size: 16px; font-weight: bold; border-radius: 5px;
+            border: none; background: #28a745; color: white; width: 80%;
         }
         button:disabled { background: #444; }
     </style>
@@ -84,15 +86,18 @@
             <div id="g-no" class="guide-box"><span class="guide-label">No.</span></div>
             <div id="g-model" class="guide-box"><span class="guide-label">型式</span></div>
             <div id="g-part" class="guide-box"><span class="guide-label">部品名</span></div>
-            <div id="g-work-group">
-                </div>
-            <div id="g-date-group">
-                </div>
+            
+            <div id="g-work-group" class="group-container">
+                <span class="guide-label" style="top:-14px; left:0;">作業名</span>
+            </div>
+            <div id="g-date-group" class="group-container">
+                <span class="guide-label" style="top:-14px; left:0;">納期</span>
+            </div>
         </div>
     </div>
 
     <div id="controls">
-        <div id="status-bar">帳票を枠に合わせてください</div>
+        <div id="status-bar">枠内に帳票を合わせてください</div>
         <button id="cap-btn" disabled>スキャン実行</button>
     </div>
 </div>
@@ -106,25 +111,17 @@
     const status = document.getElementById('status-bar');
     const btn = document.getElementById('cap-btn');
 
-    // 9連枠生成（作業名と納期）
-    function createBoxes(groupId) {
+    function createVerticalBoxes(groupId) {
         const group = document.getElementById(groupId);
         for (let i = 0; i < 9; i++) {
             const box = document.createElement('div');
             box.className = 'sub-box';
-            // 横に並ぶ設定（20mm幅が9個）
-            box.style.left = (i * 27) + '%'; 
-            if (i === 0) {
-                const label = document.createElement('span');
-                label.className = 'guide-label';
-                label.innerText = groupId.includes('work') ? '作業名' : '納期';
-                box.appendChild(label);
-            }
+            box.style.top = (i * 11) + '%'; // 20mm間隔で配置
             group.appendChild(box);
         }
     }
-    createBoxes('g-work-group');
-    createBoxes('g-date-group');
+    createVerticalBoxes('g-work-group');
+    createVerticalBoxes('g-date-group');
 
     async function initCamera() {
         try {
@@ -134,15 +131,13 @@
             video.srcObject = stream;
             video.onloadedmetadata = () => { btn.disabled = false; };
         } catch (err) {
-            status.innerText = "カメラ起動エラー";
+            status.innerText = "カメラエラー";
         }
     }
 
     btn.onclick = async () => {
         btn.disabled = true;
         const ctx = canvas.getContext('2d');
-
-        // 【重要】縦で撮った画像を、OCRが読みやすいように「横長」に回転して保存
         canvas.width = video.videoHeight;
         canvas.height = video.videoWidth;
         ctx.translate(canvas.width / 2, canvas.height / 2);
@@ -152,7 +147,6 @@
         const base64Data = canvas.toDataURL('image/jpeg', 0.8);
         previewImg.src = base64Data;
         previewImg.style.display = 'block';
-
         const size = Math.round((base64Data.length * 0.75) / 1024);
         status.innerText = `送信完了 (${size}KB)`;
 
@@ -161,7 +155,6 @@
             btn.disabled = false;
         }, 1000);
     };
-
     window.onload = initCamera;
 </script>
 </body>
