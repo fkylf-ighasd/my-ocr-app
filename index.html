@@ -3,231 +3,172 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>精密帳票スキャナー(画面最適化)</title>
+    <title>精密帳票OCR</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
-        /* height: 100dvh を使い、アドレスバーを除いた表示領域に固定する */
-        body { 
-            margin: 0; background: #000; color: #fff; font-family: sans-serif; 
-            overflow: hidden; height: 100dvh; 
-        }
+        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; overflow: hidden; height: 100dvh; }
+        #main-container { position: relative; width: 100%; height: 100dvh; }
+        
+        /* カメラ映像 */
+        #camera-view { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; }
+        video, #preview-img { width: 100%; height: 100%; object-fit: cover; }
+        #preview-img { position: absolute; top: 0; left: 0; z-index: 5; display: none; }
 
-        #main-container {
-            position: relative; width: 100%; height: 100dvh;
-            display: flex; flex-direction: column;
-        }
-
-        #camera-view {
-            position: relative; flex: 1;
-            display: flex; align-items: center; justify-content: center;
-            overflow: hidden;
-        }
-        video, #preview-img { position: absolute; width: 100%; height: 100%; object-fit: cover; }
-        #preview-img { z-index: 5; display: none; }
-
-        /* ガイド：高さを 80% 程度に圧縮して上下に余裕を持たせる */
+        /* ガイド */
         #guide-container {
-            position: relative;
-            height: 80dvh; 
-            aspect-ratio: 74 / 210;
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            height: 80dvh; aspect-ratio: 74 / 210;
             border: 2px solid rgba(0, 255, 0, 0.5);
             box-shadow: 0 0 0 100vmax rgba(0,0,0,0.7);
-            z-index: 10;
-            pointer-events: none;
+            z-index: 10; pointer-events: none;
         }
+        .guide-box { position: absolute; border: 1px solid rgba(255, 50, 50, 0.8); background: rgba(255, 50, 50, 0.1); }
+        #g-no { right: 9.46%; top: 10%; width: 10.81%; height: 14.29%; }
+        #g-model { right: 20.27%; top: 10%; width: 10.81%; height: 46.67%; }
+        #g-part { right: 31.08%; top: 10%; width: 10.81%; height: 46.67%; }
 
-        .guide-box {
-            position: absolute; border: 1px solid rgba(255, 50, 50, 0.8);
-            background: rgba(255, 50, 50, 0.1); box-sizing: border-box;
-        }
-        .guide-label {
-            position: absolute; top: 0; right: -15px; font-size: 9px; 
-            color: #ff3232; writing-mode: vertical-rl;
-        }
-
-        /* 鏡写し修正済みの座標 */
-        #g-no { right: 9.46%; top: 10.00%; width: 10.81%; height: 14.29%; }
-        #g-model { right: 20.27%; top: 10.00%; width: 10.81%; height: 46.67%; }
-        #g-part { right: 31.08%; top: 10.00%; width: 10.81%; height: 46.67%; }
-        #g-work-group { right: 45.95%; top: 10.00%; width: 6.76%; height: 85.71%; border: none; background: none;}
-        #g-date-group { right: 59.46%; top: 10.00%; width: 6.76%; height: 85.71%; border: none; background: none;}
-
-        .sub-box {
-            position: absolute; left: 0; width: 100%;
-            height: 11.11%; border-bottom: 1px dotted rgba(255,50,50,0.5);
-        }
-
-        /* UI：ボタンを少し上に持ち上げ、アドレスバーに被らないようにする */
+        /* UIエリア：ここを見やすく修正 */
         #controls { 
-            position: absolute; 
-            bottom: 40px; /* アドレスバーを考慮して少し高めに配置 */
-            left: 50%;
-            transform: translateX(-50%);
-            width: 100%;
-            text-align: center;
-            z-index: 30;
+            position: absolute; bottom: 30px; left: 0; width: 100%; 
+            text-align: center; z-index: 30; 
         }
         #status-bar { 
-            margin-bottom: 12px; font-size: 13px; color: #0f0; 
-            text-shadow: 1px 1px 3px #000;
+            background: rgba(0,0,0,0.7); display: inline-block; padding: 5px 15px;
+            margin-bottom: 10px; font-size: 14px; color: #0f0; border-radius: 10px;
         }
         button#cap-btn {
-            padding: 15px; 
-            font-size: 16px; 
-            font-weight: bold; 
-            border-radius: 50px;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            background: rgba(40, 167, 69, 0.6); 
-            color: white; 
-            width: 70%; /* 横幅を少しスリムに */
-            backdrop-filter: blur(5px);
-            -webkit-backdrop-filter: blur(5px);
+            display: block; margin: 0 auto; width: 80%; padding: 18px; 
+            font-size: 18px; font-weight: bold; border-radius: 50px;
+            border: 2px solid #fff; background: rgba(40, 167, 69, 0.8); color: #fff;
         }
+        button:disabled { background: #444; border-color: #666; }
     </style>
 </head>
 <body>
+
 <div id="main-container">
     <div id="camera-view">
         <video id="video" autoplay playsinline muted></video>
         <img id="preview-img">
         <div id="guide-container">
-            <div id="g-no" class="guide-box"><span class="guide-label">指示書No.</span></div>
-            <div id="g-model" class="guide-box"><span class="guide-label">型式</span></div>
-            <div id="g-part" class="guide-box"><span class="guide-label">部品名</span></div>
-            <div id="g-work-group" class="guide-box"><span class="guide-label">作業名(9枠)</span></div>
-            <div id="g-date-group" class="guide-box"><span class="guide-label">納期(9枠)</span></div>
+            <div id="g-no" class="guide-box"></div>
+            <div id="g-model" class="guide-box"></div>
+            <div id="g-part" class="guide-box"></div>
         </div>
     </div>
+    
     <div id="controls">
-        <div id="status-bar">読み込み中...</div>
-        <button id="cap-btn" disabled>帳票をスキャン</button>
+        <div id="status-bar">初期化中...</div>
+        <button id="cap-btn" disabled>スキャン開始</button>
     </div>
 </div>
-<canvas id="canvas" style="display:none;"></canvas>
+
+<canvas id="canvas-upload" style="display:none;"></canvas>
+
 <script>
+    const GAS_URL = "ここにあなたのGASのURL";
     const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const previewImg = document.getElementById('preview-img');
     const status = document.getElementById('status-bar');
     const btn = document.getElementById('cap-btn');
+    const previewImg = document.getElementById('preview-img');
+    const canvasUpload = document.getElementById('canvas-upload');
 
-    function createSubBoxes(groupId) {
-        const group = document.getElementById(groupId);
-        for (let i = 0; i < 9; i++) {
-            const box = document.createElement('div');
-            box.className = 'sub-box';
-            box.style.top = (i * 11.11) + '%';
-            group.appendChild(box);
+    let worker = null;
+
+    // OCRエンジンの初期化
+    async function initOCR() {
+        try {
+            status.innerText = "OCRエンジン起動中...";
+            worker = await Tesseract.createWorker('jpn');
+            status.innerText = "準備完了";
+            btn.disabled = false;
+        } catch (e) {
+            status.innerText = "OCR起動失敗。再読み込みしてください";
+            console.error(e);
         }
     }
-    createSubBoxes('g-work-group');
-    createSubBoxes('g-date-group');
 
+    // カメラの初期化
     async function initCamera() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }
             });
             video.srcObject = stream;
-            video.onloadedmetadata = () => {
-                status.innerText = "指示書No.を上にして合わせてください";
-                btn.disabled = false;
-            };
+            await initOCR();
         } catch (err) {
-            status.innerText = "カメラエラー: " + err.name;
+            status.innerText = "カメラを許可してください";
         }
     }
-// ※ここにデプロイしたURLを貼り付けてください
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbzY9KvGkYZDUG_9IFy5q91cj5A0jnpePuGIDLfaUG8nY9Gx7jDuEMY5lyoazQMNmzFBsg/exec";
-    
-btn.onclick = async () => {
-        if (!worker) {
-            status.innerText = "エラー: OCRエンジンが未起動です";
-            return;
-        }
 
+    btn.onclick = async () => {
         btn.disabled = true;
-        status.innerText = "1/3 画像を準備中...";
-
-        // 1. 画像のキャプチャと回転
+        
+        // 1. 画像キャプチャ（回転込み）
         const vW = video.videoWidth;
         const vH = video.videoHeight;
         canvasUpload.width = vH; 
         canvasUpload.height = vW;
-        const ctxU = canvasUpload.getContext('2d');
-        ctxU.translate(canvasUpload.width / 2, canvasUpload.height / 2);
-        ctxU.rotate(-90 * Math.PI / 180);
-        ctxU.drawImage(video, -vW / 2, -vH / 2);
+        const ctx = canvasUpload.getContext('2d');
+        ctx.translate(canvasUpload.width/2, canvasUpload.height/2);
+        ctx.rotate(-90 * Math.PI / 180);
+        ctx.drawImage(video, -vW/2, -vH/2);
 
-        // プレビュー表示
         previewImg.src = canvasUpload.toDataURL('image/jpeg');
         previewImg.style.display = 'block';
 
-        // 解析設定（CSSのガイド位置と連動）
-        // ※枠線を踏まないよう、少し内側を抜くように調整済み
+        // 解析エリア設定
         const areas = [
-            { id: 'no',    label: 'No.',   right: 9.46,  top: 10, w: 10.81, h: 14.29 },
-            { id: 'model', label: '型式',  right: 20.27, top: 10, w: 10.81, h: 46.67 },
-            { id: 'part',  label: '部品名', right: 31.08, top: 10, w: 10.81, h: 46.67 }
+            { id: 'no',    label: 'No.',   r: 9.46,  t: 10, w: 10.81, h: 14.29 },
+            { id: 'model', label: '型式',  r: 20.27, t: 10, w: 10.81, h: 46.67 },
+            { id: 'part',  label: '部品名', r: 31.08, t: 10, w: 10.81, h: 46.67 }
         ];
 
         const results = {};
 
         try {
-            // 2. 順番に解析（ループで1つずつ await する）
             for (let i = 0; i < areas.length; i++) {
-                const area = areas[i];
-                status.innerText = `${i + 1}/${areas.length + 1} ${area.label}を解析中...`;
+                const a = areas[i];
+                status.innerText = `${a.label}を読取中...`;
 
-                const tempCanvas = document.createElement('canvas');
-                const tCtx = tempCanvas.getContext('2d');
-                
-                // ピクセル換算
-                const imgW = canvasUpload.width;
-                const imgH = canvasUpload.height;
-                const w = Math.floor((area.w / 100) * imgW);
-                const h = Math.floor((area.h / 100) * imgH);
-                // ガイドが右(right)基準なので、X座標を計算
-                const x = Math.floor(imgW - ((area.right / 100) * imgW) - w);
-                const y = Math.floor((area.top / 100) * imgH);
+                const tmp = document.createElement('canvas');
+                const tCtx = tmp.getContext('2d');
+                const w = Math.floor((a.w/100) * canvasUpload.width);
+                const h = Math.floor((a.h/100) * canvasUpload.height);
+                const x = Math.floor(canvasUpload.width - ((a.r/100) * canvasUpload.width) - w);
+                const y = Math.floor((a.t/100) * canvasUpload.height);
 
-                tempCanvas.width = w;
-                tempCanvas.height = h;
+                tmp.width = w; tmp.height = h;
                 tCtx.drawImage(canvasUpload, x, y, w, h, 0, 0, w, h);
 
-                // OCR実行 (1つずつ順番に)
-                const { data: { text } } = await worker.recognize(tempCanvas);
-                results[area.id] = text.trim();
-                console.log(`${area.label}の結果:`, text.trim());
+                const { data: { text } } = await worker.recognize(tmp);
+                results[a.id] = text.trim();
             }
 
-            // 3. GAS送信
-            status.innerText = "スプレッドシートに保存中...";
-            const payload = {
-                no: results.no || "",
-                model: results.model || "",
-                part: results.part || "",
-                fullText: "Area OCR"
-            };
-
+            status.innerText = "シートに送信中...";
             await fetch(GAS_URL, {
                 method: "POST",
                 mode: "no-cors",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
+                body: JSON.stringify({
+                    no: results.no,
+                    model: results.model,
+                    part: results.part,
+                    fullText: "Area OCR"
+                })
             });
 
             status.innerText = "保存完了！";
-
         } catch (e) {
-            console.error(e);
-            status.innerText = "エラーが発生しました";
+            status.innerText = "エラー発生";
         }
 
         setTimeout(() => {
             previewImg.style.display = 'none';
             btn.disabled = false;
+            status.innerText = "準備完了";
         }, 1500);
     };
+
     window.onload = initCamera;
 </script>
 </body>
