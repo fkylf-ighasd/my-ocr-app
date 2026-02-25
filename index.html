@@ -3,12 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>精密帳票スキャナー(UI改善版)</title>
+    <title>精密帳票スキャナー(画面最適化)</title>
     <style>
-        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; overflow: hidden; height: 100vh; }
+        /* height: 100dvh を使い、アドレスバーを除いた表示領域に固定する */
+        body { 
+            margin: 0; background: #000; color: #fff; font-family: sans-serif; 
+            overflow: hidden; height: 100dvh; 
+        }
 
         #main-container {
-            position: relative; width: 100%; height: 100%;
+            position: relative; width: 100%; height: 100dvh;
             display: flex; flex-direction: column;
         }
 
@@ -20,10 +24,10 @@
         video, #preview-img { position: absolute; width: 100%; height: 100%; object-fit: cover; }
         #preview-img { z-index: 5; display: none; }
 
-        /* ガイド：位置はそのままで鏡写し修正済み */
+        /* ガイド：高さを 80% 程度に圧縮して上下に余裕を持たせる */
         #guide-container {
             position: relative;
-            height: 90vh; 
+            height: 80dvh; 
             aspect-ratio: 74 / 210;
             border: 2px solid rgba(0, 255, 0, 0.5);
             box-shadow: 0 0 0 100vmax rgba(0,0,0,0.7);
@@ -40,6 +44,7 @@
             color: #ff3232; writing-mode: vertical-rl;
         }
 
+        /* 鏡写し修正済みの座標 */
         #g-no { right: 9.46%; top: 10.00%; width: 10.81%; height: 14.29%; }
         #g-model { right: 20.27%; top: 10.00%; width: 10.81%; height: 46.67%; }
         #g-part { right: 31.08%; top: 10.00%; width: 10.81%; height: 46.67%; }
@@ -51,45 +56,39 @@
             height: 11.11%; border-bottom: 1px dotted rgba(255,50,50,0.5);
         }
 
-        /* --- UI：ボタンを半透明にしてガイドに被せる --- */
+        /* UI：ボタンを少し上に持ち上げ、アドレスバーに被らないようにする */
         #controls { 
-            position: absolute; /* 浮かせる */
-            bottom: 30px; /* 画面下から30pxの位置 */
+            position: absolute; 
+            bottom: 40px; /* アドレスバーを考慮して少し高めに配置 */
             left: 50%;
-            transform: translateX(-50%); /* 中央寄せ */
+            transform: translateX(-50%);
             width: 100%;
             text-align: center;
-            z-index: 30; /* ガイドより前面に */
+            z-index: 30;
         }
         #status-bar { 
-            margin-bottom: 10px; font-size: 13px; color: #0f0; 
-            text-shadow: 1px 1px 2px #000; /* 文字を見やすく */
+            margin-bottom: 12px; font-size: 13px; color: #0f0; 
+            text-shadow: 1px 1px 3px #000;
         }
         button#cap-btn {
-            padding: 18px; 
-            font-size: 18px; 
+            padding: 15px; 
+            font-size: 16px; 
             font-weight: bold; 
             border-radius: 50px;
-            border: 2px solid rgba(255, 255, 255, 0.5); /* 白い枠線 */
-            background: rgba(40, 167, 69, 0.5); /* 緑の半透明（0.5） */
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(40, 167, 69, 0.6); 
             color: white; 
-            width: 80%;
-            backdrop-filter: blur(4px); /* 背景を少しぼかして高級感を出す */
-            -webkit-backdrop-filter: blur(4px);
+            width: 70%; /* 横幅を少しスリムに */
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
         }
-        button:active {
-            background: rgba(40, 167, 69, 0.8); /* 押した時は濃くする */
-        }
-        button:disabled { background: rgba(68, 68, 68, 0.5); }
     </style>
 </head>
 <body>
-
 <div id="main-container">
     <div id="camera-view">
         <video id="video" autoplay playsinline muted></video>
         <img id="preview-img">
-        
         <div id="guide-container">
             <div id="g-no" class="guide-box"><span class="guide-label">指示書No.</span></div>
             <div id="g-model" class="guide-box"><span class="guide-label">型式</span></div>
@@ -98,17 +97,13 @@
             <div id="g-date-group" class="guide-box"><span class="guide-label">納期(9枠)</span></div>
         </div>
     </div>
-
     <div id="controls">
-        <div id="status-bar">カメラ準備中...</div>
+        <div id="status-bar">読み込み中...</div>
         <button id="cap-btn" disabled>帳票をスキャン</button>
     </div>
 </div>
-
 <canvas id="canvas" style="display:none;"></canvas>
-
 <script>
-    // JS部分は以前のものをそのまま維持
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const previewImg = document.getElementById('preview-img');
@@ -138,7 +133,7 @@
                 btn.disabled = false;
             };
         } catch (err) {
-            status.innerText = "カメラエラー";
+            status.innerText = "カメラエラー: " + err.name;
         }
     }
 
@@ -163,9 +158,8 @@
             previewImg.style.display = 'none';
             btn.disabled = false;
             status.innerText = "次の帳票をスキャンできます";
-        }, 1000);
+        }, 1200);
     };
-
     window.onload = initCamera;
 </script>
 </body>
